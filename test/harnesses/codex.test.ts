@@ -446,5 +446,5 @@ describe("Codex harness", () => {
     expect(events.filter((event) => event.startsWith("start "))).toHaveLength(12);
     expect(active).toBe(0);
     expect(maximumActive).toBe(1);
-  });
+  }, 15000);
 });

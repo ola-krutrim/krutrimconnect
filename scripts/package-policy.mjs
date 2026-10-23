@@ -8,13 +8,12 @@ export const REQUIRED_PACKAGE_PATHS = [
   "docs/legal/PRIVACY_POLICY.md",
   "docs/legal/TERMS_AND_CONDITIONS.md",
   "docs/legal/LICENSE_SCOPE.md",
-  "docs/legal/RELEASE_REVIEW.md",
   "dist/cli.js",
   "dist/version.js",
   "schemas/README.md",
   "schemas/codex-config.schema.json",
-  "docs/distribution-and-auth-roadmap.md",
-  "docs/phase-2-conformance.md",
+  "docs/user-guide.md",
+  "docs/legal/USER_NOTICES.md",
 ];
 
 export function assertPackedManifest(packed) {
@@ -31,6 +30,8 @@ export function assertPackedManifest(packed) {
   for (const entry of paths) {
     if (
       entry.startsWith("docs/hld/") ||
+      /^docs\/phase-/u.test(entry) ||
+      /(?:roadmap|RELEASE_REVIEW|POC-Architecture)/u.test(entry) ||
       entry.startsWith("src/") ||
       entry.startsWith("test/") ||
       entry === ".env" ||

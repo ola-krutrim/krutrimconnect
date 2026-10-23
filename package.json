@@ -1,6 +1,6 @@
 {
   "name": "krutrimconnect",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Capability-aware CLI for connecting AI coding tools to Krutrim Cloud inference APIs",
   "repository": {
     "type": "git",
@@ -23,7 +23,6 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "docs/*.md",
     "schemas",
     "catalog",
     "README.md",
@@ -34,7 +33,8 @@
     "docs/legal/PRIVACY_POLICY.md",
     "docs/legal/TERMS_AND_CONDITIONS.md",
     "docs/legal/LICENSE_SCOPE.md",
-    "docs/legal/RELEASE_REVIEW.md"
+    "docs/user-guide.md",
+    "docs/legal/USER_NOTICES.md"
   ],
   "engines": {
     "node": ">=20.17.0"

@@ -147,7 +147,7 @@ export class CodexHarness implements CodingToolHarness {
         .map((item) => `${item.name}=${capabilities[item.name].support}`)
         .join(", ");
       throw new CapabilityError(
-        `Codex activation is blocked because required Krutrim capabilities are not verified (${details}). Run the explicit krutrimconnect codex probe for this exact model, then inspect krutrimconnect doctor --model. See docs/phase-2-conformance.md. No config was changed.`,
+        `Codex activation is blocked because required Krutrim capabilities are not verified (${details}). Run the explicit krutrimconnect codex probe for this exact model, then inspect krutrimconnect doctor --model. See docs/user-guide.md. No config was changed.`,
       );
     }
   }

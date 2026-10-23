@@ -26,11 +26,11 @@ function fixture() {
   writeFileSync(path.join(root, "package.json"), JSON.stringify(manifest));
   writeFileSync(path.join(root, "package-lock.json"), JSON.stringify(lock));
   writeFileSync(path.join(root, "dist/cli.js"), "console.log('1.2.3');\n");
-  for (const file of ["schemas/config.json", "catalog/models.json", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/legal/RELEASE_REVIEW.md", "README.md", "SECURITY.md", "install.sh"]) {
+  for (const file of ["schemas/config.json", "catalog/models.json", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md", "README.md", "SECURITY.md", "install.sh"]) {
     writeFileSync(path.join(root, file), `fixture ${file}\n`);
   }
   execFileSync("git", ["init", "--quiet", root]);
-  execFileSync("git", ["add", "package.json", "package-lock.json", "schemas", "catalog", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/legal/RELEASE_REVIEW.md", "README.md", "SECURITY.md", "install.sh"], { cwd: root });
+  execFileSync("git", ["add", "package.json", "package-lock.json", "schemas", "catalog", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md", "README.md", "SECURITY.md", "install.sh"], { cwd: root });
   return root;
 }
 
@@ -98,7 +98,7 @@ describe.runIf(process.platform === "darwin" || process.platform === "linux")("r
         expect(stage).not.toBe(stagingDirectory);
         expect(existsSync(path.join(stage, "node_modules/.bin"))).toBe(false);
         expect(existsSync(path.join(stage, "package-lock.json"))).toBe(false);
-        for (const file of ["LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/legal/RELEASE_REVIEW.md"]) {
+        for (const file of ["LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md"]) {
           expect(existsSync(path.join(stage, file)), file).toBe(true);
         }
         expect(JSON.parse(readFileSync(path.join(stage, "release.json"), "utf8"))).toMatchObject({

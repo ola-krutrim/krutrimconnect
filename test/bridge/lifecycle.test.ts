@@ -478,8 +478,8 @@ it.each(["opencode", "codex"] as const)("%s interrupted reused activation is rec
 }, 15000);
 
 const fixture = fileURLToPath(new URL("../fixtures/bridge-lifecycle.mjs", import.meta.url));
-async function until<T>(read: () => Promise<T>, accept: (value: T) => boolean): Promise<T> {
-  const deadline = Date.now() + 3000;
+async function until<T>(read: () => Promise<T>, accept: (value: T) => boolean, timeoutMs = 3000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
   let value: T;
   do {
     value = await read();
@@ -506,13 +506,14 @@ async function setup(owner: "codex" | "opencode", extra: object = {}, beforeStar
   return {
     test, parent, messages,
     async child() {
-      const identity = await until(async () => JSON.parse(await readFile(path.join(test.paths.appHome, "child.json"), "utf8").catch(() => "null")) as { pid: number } | null, (v) => v !== null);
+      // Node/tsx bootstrap can exceed three seconds on hosted Intel runners.
+      const identity = await until(async () => JSON.parse(await readFile(path.join(test.paths.appHome, "child.json"), "utf8").catch(() => "null")) as { pid: number } | null, (v) => v !== null, 10000);
       expect(identity, `${errors}\n${JSON.stringify(messages)}`).not.toBeNull();
       childPid = identity!.pid;
       return childPid;
     },
     async message(type: string) {
-      const message = await until(async () => messages.find((m) => m.type === type), (v) => v !== undefined);
+      const message = await until(async () => messages.find((m) => m.type === type), (v) => v !== undefined, 10000);
       expect(message, `${errors}\n${JSON.stringify(messages)}`).toBeDefined();
       return message!;
     },

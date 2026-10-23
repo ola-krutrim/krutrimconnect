@@ -8,7 +8,7 @@ import path from "node:path";
 import { releaseIdentity } from "./release-artifact-policy.mjs";
 
 const ASSET_DIRECTORIES = ["schemas", "catalog", "licenses"];
-const ASSET_FILES = ["LICENSE", "NOTICE", "README.md", "SECURITY.md", "install.sh", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/legal/RELEASE_REVIEW.md"];
+const ASSET_FILES = ["LICENSE", "NOTICE", "README.md", "SECURITY.md", "install.sh", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md"];
 
 // Resolve both launcher symlinks and the installer's `current` directory symlink.
 const LAUNCHER = `#!/bin/sh
