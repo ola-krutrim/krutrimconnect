@@ -148,6 +148,7 @@ describe.runIf(process.platform === "darwin" || process.platform === "linux")("r
       writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, version: "1.0.0", type: "module", main: "index.js" }));
       writeFileSync(path.join(dir, "index.js"), `import {appendFileSync} from 'node:fs'; appendFileSync('${stage}/imports.txt', '${name}\\n');\n`);
     }
+    writeFileSync(path.join(stage, "package.json"), JSON.stringify({ name: "fixture", type: "module" }));
     mkdirSync(path.join(stage, "dist/fs"), {recursive:true});
     writeFileSync(path.join(stage,"dist/fs/native-lock.js"), "import 'fs-native-extensions';\n");
     smokeRelease(stage, root, { metadata: { version: "1.2.3" } });

@@ -384,7 +384,7 @@ if [ "$REQUESTED_VERSION" = latest ]; then
   if [ "${KRUTRIM_CONNECT_GITHUB_AUTH:-0}" = 1 ]; then
     tag="$(gh release view --repo "$REPOSITORY" --json tagName --jq .tagName)" || fail "Cannot read GitHub Releases. Check gh authentication and repository access."
   else
-    release_url="$(curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{url_effective}' "https://github.com/$REPOSITORY/releases/latest")" || fail "Cannot read public GitHub Releases. Internal repositories need KRUTRIM_CONNECT_GITHUB_AUTH=1 and gh login; a published release must exist."
+    release_url="$(curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 60 --output /dev/null --write-out '%{url_effective}' "https://github.com/$REPOSITORY/releases/latest")" || fail "Cannot read public GitHub Releases. Check your network, proxy or firewall, and retry; a published release must exist."
     case "$release_url" in
       "https://github.com/$REPOSITORY/releases/tag/"*) tag="${release_url##*/}" ;;
       *) fail "Unexpected GitHub release URL." ;;
@@ -422,7 +422,7 @@ elif [ "${KRUTRIM_CONNECT_GITHUB_AUTH:-0}" = 1 ]; then
   gh release download "v$REQUESTED_VERSION" --repo "$REPOSITORY" --pattern "$archive" --pattern "$archive.sha256" --dir "$work" || fail "Could not download release artifacts. Check repository access, release version, and supported platform."
 else
   for asset in "$archive" "$archive.sha256"; do
-    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 300 --retry 2 --output "$work/$asset" "https://github.com/$REPOSITORY/releases/download/v$REQUESTED_VERSION/$asset" || fail "Could not download release artifact. Check release version and supported platform; internal repositories require KRUTRIM_CONNECT_GITHUB_AUTH=1."
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 300 --retry 2 --output "$work/$asset" "https://github.com/$REPOSITORY/releases/download/v$REQUESTED_VERSION/$asset" || fail "Could not download release artifact. Check your network, proxy or firewall and retry; also confirm the release version and supported platform."
   done
 fi
 info "Verifying KrutrimConnect..."

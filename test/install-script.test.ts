@@ -439,6 +439,16 @@ describe.runIf(process.platform !== "win32")("install.sh", () => {
     }
   });
 
+  it("does not blame internal repositories for public download failures", async () => {
+    const source = await readFile(INSTALL_SCRIPT, "utf8");
+    for (const message of ["Cannot read public GitHub Releases.", "Could not download release artifact."]) {
+      const line = source.split("\n").find((candidate) => candidate.includes(message));
+      expect(line, message).toBeDefined();
+      expect(line).not.toMatch(/internal/iu);
+      expect(line).toMatch(/network, proxy or firewall/u);
+    }
+  });
+
   it("supports help without requiring Node.js or npm", async () => {
     const result = await runInstaller({ PATH: "/usr/bin:/bin" }, ["--help"]);
     expect(result.code).toBe(0);
