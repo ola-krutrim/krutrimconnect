@@ -1,0 +1,108 @@
+{
+  "provider": "krutrim",
+  "live": true,
+  "fetched": "2026-10-23T03:45:26.451Z",
+  "snapshotObserved": "2026-08-12",
+  "models": [
+    {
+      "id": "gpt-oss-20b",
+      "availability": "available",
+      "metadataSource": "registry",
+      "publisher": "openai",
+      "modality": "text-generation",
+      "contextLength": 131072,
+      "pricing": {
+        "input": 8,
+        "output": 32
+      }
+    },
+    {
+      "id": "gpt-oss-120b",
+      "availability": "available",
+      "metadataSource": "registry",
+      "publisher": "openai",
+      "modality": "text-generation",
+      "contextLength": 65536,
+      "pricing": {
+        "input": 13,
+        "output": 65
+      }
+    },
+    {
+      "id": "gemma-4-E4B-it",
+      "availability": "available",
+      "metadataSource": "registry",
+      "publisher": "google",
+      "modality": "multimodal",
+      "contextLength": 131072,
+      "pricing": {
+        "input": 3,
+        "output": 8
+      }
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "availability": "available",
+      "metadataSource": "registry",
+      "publisher": "google",
+      "modality": "multimodal",
+      "contextLength": 131072,
+      "pricing": {
+        "input": 9,
+        "output": 33
+      }
+    },
+    {
+      "id": "gemma-4-26B-A4B-it",
+      "availability": "available",
+      "metadataSource": "registry",
+      "publisher": "google",
+      "modality": "multimodal",
+      "contextLength": 262144,
+      "pricing": {
+        "input": 7,
+        "output": 28
+      }
+    },
+    {
+      "id": "Qwen3.5-9B",
+      "availability": "available",
+      "metadataSource": "registry",
+      "publisher": "Qwen",
+      "modality": "multimodal",
+      "contextLength": 262144,
+      "pricing": {
+        "input": 3,
+        "output": 8
+      }
+    },
+    {
+      "id": "Qwen3.6-35B-A3B",
+      "availability": "available",
+      "metadataSource": "registry",
+      "publisher": "Qwen",
+      "modality": "multimodal",
+      "contextLength": 262144,
+      "pricing": {
+        "input": 7,
+        "output": 28
+      }
+    },
+    {
+      "id": "Qwen3.6-27B",
+      "availability": "unlisted",
+      "metadataSource": "snapshot",
+      "publisher": "Qwen",
+      "modality": "multimodal",
+      "pricing": {
+        "input": 23,
+        "output": 188
+      }
+    },
+    {
+      "id": "GLM-5.3-Flash",
+      "availability": "unlisted",
+      "metadataSource": "none"
+    }
+  ]
+}

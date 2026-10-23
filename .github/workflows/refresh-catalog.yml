@@ -1,0 +1,49 @@
+name: refresh-catalog
+
+on:
+  schedule:
+    - cron: "30 3 * * *" # daily 09:00 IST
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    if: >-
+      github.repository == 'ola-krutrim/krutrimconnect' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Refresh catalogue from live endpoints
+        env:
+          KRUTRIM_API_KEY: ${{ secrets.KRUTRIM_CATALOG_API_KEY }}
+        run: node scripts/refresh-catalog.mjs
+      - name: Commit when the catalogue changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- catalog/krutrim-live.json; then
+            echo "Catalogue unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "krutrim-catalog-bot"
+          git config user.email "krutrim-catalog-bot@users.noreply.github.com"
+          git add catalog/krutrim-live.json
+          git commit -m "chore: refresh published model catalogue"
+          git -c credential.helper= \
+            -c 'credential.helper=!f() { printf "%s\n" "username=x-access-token" "password=$GH_TOKEN"; }; f' \
+            push origin HEAD:refs/heads/main

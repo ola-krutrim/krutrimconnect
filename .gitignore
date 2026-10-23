@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+/krutrimconnect-*.tgz
+/krutrimconnect-*.tgz.sha256
+/krutrimconnect-*.manifest.json
+/krutrimconnect-*.dogfood.json
+/release/
+/.hermes-preview/
+/docs/release-review/
+/docs/fireconnect-comparison-codex-session.md

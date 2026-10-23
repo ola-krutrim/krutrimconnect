@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    paths-ignore:
+      - "catalog/**"
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: >-
+      github.repository == 'ola-krutrim/krutrimconnect' &&
+      github.event.repository.private == false
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20.17.0", "22.x"]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Isolate npm configuration
+        run: |
+          umask 077
+          config_dir="$(mktemp -d "${RUNNER_TEMP}/krutrimconnect-npm.XXXXXX")"
+          : > "$config_dir/user.npmrc"
+          : > "$config_dir/global.npmrc"
+          printf 'NPM_CONFIG_USERCONFIG=%s\n' "$config_dir/user.npmrc" >> "$GITHUB_ENV"
+          printf 'NPM_CONFIG_GLOBALCONFIG=%s\n' "$config_dir/global.npmrc" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run check:installer
+      - run: npm test
+      - run: npm run build
+      - run: npm run verify:package

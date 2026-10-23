@@ -1,0 +1,86 @@
+{
+  "name": "krutrimconnect",
+  "version": "0.1.0",
+  "description": "Capability-aware CLI for connecting AI coding tools to Krutrim Cloud inference APIs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ola-krutrim/krutrimconnect.git"
+  },
+  "homepage": "https://github.com/ola-krutrim/krutrimconnect#readme",
+  "bugs": {
+    "url": "https://github.com/ola-krutrim/krutrimconnect/issues"
+  },
+  "type": "module",
+  "bin": {
+    "krutrimconnect": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "docs/*.md",
+    "schemas",
+    "catalog",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE",
+    "NOTICE",
+    "licenses",
+    "docs/legal/PRIVACY_POLICY.md",
+    "docs/legal/TERMS_AND_CONDITIONS.md",
+    "docs/legal/LICENSE_SCOPE.md",
+    "docs/legal/RELEASE_REVIEW.md"
+  ],
+  "engines": {
+    "node": ">=20.17.0"
+  },
+  "packageManager": "npm@11.17.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "postbuild": "node scripts/ensure-bin-mode.mjs",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "check:installer": "sh -n install.sh",
+    "verify:package": "node scripts/verify-package.mjs",
+    "pack:release": "npm run build && node scripts/build-release.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "pack:dogfood": "node scripts/build-dogfood.mjs",
+    "clean": "node scripts/clean.mjs",
+    "dev": "tsx src/cli.ts",
+    "prebuild": "npm run clean",
+    "prepack": "npm run build",
+    "test": "vitest run --exclude 'test/integration/**'",
+    "test:integration": "vitest run test/integration",
+    "test:integration:capabilities": "vitest run test/integration/krutrim-conformance.test.ts",
+    "test:integration:bridge": "vitest run test/integration/krutrim-chat-bridge.test.ts",
+    "test:all": "vitest run"
+  },
+  "keywords": [
+    "krutrim",
+    "codex",
+    "cli",
+    "openai-compatible"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@decimalturn/toml-patch": "^3.0.2",
+    "@inquirer/prompts": "^8.5.2",
+    "@napi-rs/keyring": "^1.3.0",
+    "ajv": "^8.20.0",
+    "commander": "^14.0.3",
+    "fs-native-extensions": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^4.1.12",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vite": "6.4.5",
+    "vitest": "^4.1.12"
+  },
+  "private": true
+}

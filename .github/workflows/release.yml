@@ -1,0 +1,176 @@
+name: draft-github-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact package version; dispatch using its existing vVERSION tag"
+        required: true
+        type: string
+      confirmation:
+        description: "Type exactly: release vVERSION"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+# Hosted runners need organization billing/approval, including internal repositories.
+# Runner architecture reference: https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+# This workflow creates only a DRAFT; public release approval remains a separate action.
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.guard.outputs.version }}
+      tag: ${{ steps.guard.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate manual request and existing tag
+        id: guard
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          import { assertDraftReleaseRequest } from './scripts/release-artifact-policy.mjs';
+          const request = assertDraftReleaseRequest({
+            version: process.env.RELEASE_VERSION,
+            packageVersion: JSON.parse(readFileSync('package.json', 'utf8')).version,
+            confirmation: process.env.RELEASE_CONFIRMATION,
+            repository: process.env.GITHUB_REPOSITORY,
+            ref: process.env.GITHUB_REF,
+            eventName: process.env.GITHUB_EVENT_NAME,
+          });
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${request.version}\ntag=${request.tag}\n`);
+          NODE
+          TAG="v$RELEASE_VERSION"
+          tag_commit=$(git rev-parse "refs/tags/$TAG^{commit}")
+          test "$tag_commit" = "$GITHUB_SHA"
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - name: Verify native build host
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { assertPortableRuntime } from './scripts/build-release.mjs';
+          if (process.platform !== process.env.EXPECTED_PLATFORM || process.arch !== process.env.EXPECTED_ARCH) {
+            throw new Error('Runner/runtime architecture does not match the artifact matrix.');
+          }
+          assertPortableRuntime();
+          NODE
+      - run: npm ci
+      - run: npm run check
+      - run: npm run check:installer
+      - run: npm test
+      - run: npm run build
+      - run: node scripts/build-release.mjs
+      - run: node scripts/verify-release.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/krutrimconnect-${{ needs.validate.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+            release/krutrimconnect-${{ needs.validate.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+      - name: Verify assets and create draft only
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_commit=$(git rev-parse "refs/tags/$TAG^{commit}")
+          test "$tag_commit" = "$GITHUB_SHA"
+          cp install.sh release/install.sh
+          assets=(release/install.sh)
+          for target in darwin-arm64 darwin-x64 linux-x64; do
+            asset="krutrimconnect-$VERSION-$target.tar.gz"
+            test -f "release/$asset"
+            test -f "release/$asset.sha256"
+            (cd release && sha256sum --check "$asset.sha256")
+            assets+=("release/$asset" "release/$asset.sha256")
+          done
+          # Never modify an existing release (draft or published), and never create a tag.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf '%s\n' 'Release already exists; refusing to overwrite it.' >&2
+            exit 1
+          fi
+          prerelease=()
+          case "$VERSION" in *-next.*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
+            --draft --verify-tag "${prerelease[@]}" --title "KrutrimConnect $TAG" \
+            --notes 'Self-contained macOS arm64/x64 and Linux x64 (glibc) archives. Review and approve this draft before publication.'
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets > release/verified-release.json
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const result = JSON.parse(readFileSync('release/verified-release.json', 'utf8'));
+          const expected = ['install.sh', ...['darwin-arm64', 'darwin-x64', 'linux-x64'].flatMap(target => {
+            const name = `krutrimconnect-${process.env.VERSION}-${target}.tar.gz`;
+            return [name, `${name}.sha256`];
+          })].sort();
+          if (result.isDraft !== true || result.tagName !== process.env.TAG ||
+              JSON.stringify(result.assets.map(asset => asset.name).sort()) !== JSON.stringify(expected)) {
+            throw new Error('Draft release read-back did not match the expected tag and assets.');
+          }
+          console.log(`Verified draft ${result.tagName}: ${expected.length} assets.`);
+          NODE

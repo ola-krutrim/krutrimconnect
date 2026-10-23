@@ -1,0 +1,16 @@
+KrutrimConnect
+Copyright 2026 Krutrim SI Designs Private Limited and KrutrimConnect contributors.
+
+The KrutrimConnect source made available under this release is licensed under
+the Apache License, Version 2.0. See LICENSE for the unmodified licence text.
+Earlier MIT notices are retained in licenses/MIT-legacy.txt; rights already
+granted under those notices are not withdrawn.
+
+This source-code licence does not grant rights to Krutrim Cloud services,
+models, model weights, APIs, trademarks, or other separately governed assets.
+Third-party components remain subject to their own licences and notices.
+Release archives retain production dependency notices in node_modules and
+the bundled Node.js licence in licenses/Node-LICENSE.
+
+Third-party names identify compatibility only. They do not imply affiliation,
+endorsement, sponsorship, or partnership unless expressly stated.
