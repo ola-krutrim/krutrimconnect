@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.4"
       - name: Validate manual request and existing tag
         id: guard
         env:
@@ -82,7 +82,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.4"
           architecture: ${{ matrix.arch }}
           cache: npm
       - name: Verify native build host
@@ -113,8 +113,16 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  additional:
+    needs: validate
+    permissions:
+      contents: write
+    uses: ./.github/workflows/platform-support.yml
+    with:
+      publish: false
+
   publish:
-    needs: [validate, build]
+    needs: [validate, build, additional]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -129,10 +137,10 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.23.4"
       - uses: actions/download-artifact@v4
         with:
-          pattern: release-*
+          pattern: "*"
           merge-multiple: true
           path: release
       - name: Verify assets and create draft only
@@ -142,11 +150,16 @@ jobs:
           tag_commit=$(git rev-parse "refs/tags/$TAG^{commit}")
           test "$tag_commit" = "$GITHUB_SHA"
           cp install.sh release/install.sh
-          assets=(release/install.sh)
+          cp install.ps1 release/install.ps1
+          assets=(release/install.sh release/install.ps1)
           for target in darwin-arm64 darwin-x64 linux-x64; do
             asset="krutrimconnect-$VERSION-$target.tar.gz"
             test -f "release/$asset"
             test -f "release/$asset.sha256"
+            (cd release && sha256sum --check "$asset.sha256")
+            assets+=("release/$asset" "release/$asset.sha256")
+          done
+          for asset in "krutrimconnect-$VERSION-linux-x64-musl.tar.gz" "krutrimconnect-$VERSION-win32-x64.zip"; do
             (cd release && sha256sum --check "$asset.sha256")
             assets+=("release/$asset" "release/$asset.sha256")
           done
@@ -159,12 +172,13 @@ jobs:
           case "$VERSION" in *-next.*) prerelease=(--prerelease) ;; esac
           gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
             --draft --verify-tag "${prerelease[@]}" --title "KrutrimConnect $TAG" \
-            --notes 'Self-contained macOS arm64/x64 and Linux x64 (glibc) archives. Review and approve this draft before publication.'
+            --notes 'Self-contained macOS arm64/x64, Linux x64 glibc/musl and Windows x64 archives. Review and approve this draft before publication.'
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets > release/verified-release.json
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
           const result = JSON.parse(readFileSync('release/verified-release.json', 'utf8'));
-          const expected = ['install.sh', ...['darwin-arm64', 'darwin-x64', 'linux-x64'].flatMap(target => {
+          const extra = [`krutrimconnect-${process.env.VERSION}-linux-x64-musl.tar.gz`, `krutrimconnect-${process.env.VERSION}-win32-x64.zip`].flatMap(name => [name, `${name}.sha256`]);
+          const expected = ['install.sh', 'install.ps1', ...extra, ...['darwin-arm64', 'darwin-x64', 'linux-x64'].flatMap(target => {
             const name = `krutrimconnect-${process.env.VERSION}-${target}.tar.gz`;
             return [name, `${name}.sha256`];
           })].sort();

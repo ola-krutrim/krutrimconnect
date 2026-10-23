@@ -5,6 +5,11 @@ import fs from "node:fs";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 register();
+// Windows process.kill terminates instead of delivering a catchable console signal.
+// Simulate the Node console event over fixture IPC; forced parent death is tested separately.
+const fixtureSignal = value => {
+  if (value?.fixtureSignal === "SIGINT" || value?.fixtureSignal === "SIGTERM") process.emit(value.fixtureSignal);
+};
 const loopbackFetch = globalThis.fetch;
 globalThis.fetch = (input, options) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
@@ -36,7 +41,8 @@ if (args[0] === "_bridge") {
     let runtimeSyncIntercepted = false;
     const open = fs.promises.open;
     fs.promises.open = async (...args) => {
-      const handle = await open(...args);
+      const handle = process.platform === "win32" && args[0] === path.join(appHome, "runtime")
+        ? { sync: async () => {}, close: async () => {} } : await open(...args);
       if (args[0] === path.join(appHome, "runtime")) {
         const sync = handle.sync.bind(handle);
         handle.sync = async () => {
@@ -83,6 +89,7 @@ if (args[0] === "_bridge") {
       .catch(() => process.send({ type: "metadata-failed" }));
     process.disconnect();
   } else if (settings.activation) {
+    if (process.platform === "win32") process.on("message", fixtureSignal);
     const { enableCodexAutomatically, enableOpenCodeAutomatically } = await import("../../src/bridge/connection.ts");
     const { writeBridgeEvidence, sealBridgeProbeResult, BRIDGE_EVIDENCE_SCHEMA_VERSION, CHAT_BRIDGE_FEASIBILITY_CONTRACT } = await import("../../src/bridge/evidence.ts");
     const { krutrimProvider } = await import("../../src/providers/krutrim.ts");
@@ -112,7 +119,7 @@ if (args[0] === "_bridge") {
       if (settings.signalAfter) {
         await new Promise((resolve) => {
           process.once(settings.signalAfter, resolve);
-          process.kill(process.pid, settings.signalAfter);
+          (process.platform === "win32" ? process.emit(settings.signalAfter) : process.kill(process.pid, settings.signalAfter));
         });
       }
       if (settings.pauseAfter) {
@@ -161,7 +168,7 @@ if (args[0] === "_bridge") {
         : await enableOpenCodeAutomatically(settings.paths, import.meta.filename, { read: async () => key }, model, now);
       process.send({ type: "activated", result });
     } catch (error) { process.send({ type: "failed", message: error.message }); }
-    finally { clearInterval(credentialHandle); }
+    finally { clearInterval(credentialHandle); process.removeListener("message", fixtureSignal); }
   } else try {
     const started = await runtime.startBridgeRuntime(settings.paths, import.meta.filename,
       settings.owner, "fixture-model", { startupTimeoutMs: settings.timeout ?? 5000 });

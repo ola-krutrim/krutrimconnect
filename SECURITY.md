@@ -31,6 +31,19 @@ The CLI protects credentials from config files, normal status/doctor output,
 and accidental command-line history. It does not attempt to isolate the key from
 other processes already running with the same OS-user privileges.
 
+## Release installation
+
+The Windows installer uses per-user directories protected by Windows ACLs. It
+rejects unmanaged reparse points, unowned installation metadata and unrelated launchers.
+A single owned junction connects the launcher directory to the installation root;
+its resolved target is checked before changes.
+The CLI validates the managed release trees before upgrading or removing them.
+Windows executable removal finishes in a separate cleanup process after the CLI
+exits; close older CLI sessions before uninstalling.
+
+Alpine archives include a musl runtime and a small N-API binding for Linux
+open-file-description locks. A compiler is needed only on the build host.
+
 ## Automatic capability qualification
 
 `krutrimconnect codex on --model` and `krutrimconnect opencode on --model`
@@ -90,7 +103,7 @@ and sends it only to the fixed Krutrim HTTPS Chat Completions endpoint with
 redirects disabled.
 
 Health and shutdown routes require a separate random control token stored only
-in the private `0600` runtime record. Responses requests, upstream streams, and
+in the private runtime record (`0600` permissions on POSIX; user-profile ACLs on Windows). Responses requests, upstream streams, and
 function/custom-tool arguments are bounded and are not persisted. The managed
 bridge catalog selects Codex's direct function-tool mode and disables freeform
 apply-patch, so the primary shell path uses ordinary bounded JSON function

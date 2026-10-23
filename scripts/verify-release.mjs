@@ -44,7 +44,7 @@ try {
     const { createRequire } = await import('node:module');
     const require = createRequire(root + '/package.json');
     require('@napi-rs/keyring');
-    require('fs-native-extensions');
+    await import('file://' + root + '/dist/fs/native-lock.js');
   `]);
   const marker = JSON.parse(readFileSync(path.join(installDir, "install.json"), "utf8"));
   assert.equal(marker.installDir, installDir);
@@ -64,7 +64,7 @@ try {
   }
   const fixtureAssets = path.join(root, "fixture-assets");
   const metadata = JSON.parse(readFileSync(path.join(fixture, "release.json"), "utf8"));
-  const identity = releaseIdentity(next, { platform: metadata.platform, arch: metadata.arch, nodeVersion: metadata.nodeVersion, glibcVersion: "fixture" });
+  const identity = releaseIdentity(next, { platform: metadata.platform, arch: metadata.arch, nodeVersion: metadata.nodeVersion, glibcVersion: metadata.libc === "musl" ? undefined : "fixture", libc: metadata.libc });
   packRelease(fixture, fixtureAssets, identity);
   run(node, ["--input-type=module", "-e", `
     const { pathToFileURL } = await import('node:url');

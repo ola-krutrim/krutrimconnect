@@ -1,3 +1,4 @@
+import { toolInvocation } from "../tool-invocation.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -67,7 +68,10 @@ export async function runCodexCanaryProcess(
     let failure: CodexCanaryProcessResult["failure"];
     let settled = false;
     let forceKill: NodeJS.Timeout | undefined;
-    const child = spawn(request.command, request.args, {
+    let invocation;
+    try { invocation = toolInvocation(request.command, request.args, request.env); }
+    catch { resolve({exitCode:null,stdout:"",stderr:"",failure:"spawn"}); return; }
+    const child = spawn(invocation.command, invocation.args, {
       cwd: request.cwd,
       env: request.env,
       shell: false,

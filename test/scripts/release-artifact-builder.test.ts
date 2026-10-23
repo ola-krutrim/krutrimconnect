@@ -26,11 +26,11 @@ function fixture() {
   writeFileSync(path.join(root, "package.json"), JSON.stringify(manifest));
   writeFileSync(path.join(root, "package-lock.json"), JSON.stringify(lock));
   writeFileSync(path.join(root, "dist/cli.js"), "console.log('1.2.3');\n");
-  for (const file of ["schemas/config.json", "catalog/models.json", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md", "README.md", "SECURITY.md", "install.sh"]) {
+  for (const file of ["schemas/config.json", "catalog/models.json", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md", "README.md", "SECURITY.md", "install.sh", "install.ps1"]) {
     writeFileSync(path.join(root, file), `fixture ${file}\n`);
   }
   execFileSync("git", ["init", "--quiet", root]);
-  execFileSync("git", ["add", "package.json", "package-lock.json", "schemas", "catalog", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md", "README.md", "SECURITY.md", "install.sh"], { cwd: root });
+  execFileSync("git", ["add", "package.json", "package-lock.json", "schemas", "catalog", "LICENSE", "NOTICE", "licenses/MIT-legacy.txt", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md", "README.md", "SECURITY.md", "install.sh", "install.ps1"], { cwd: root });
   return root;
 }
 
@@ -54,6 +54,19 @@ describe.runIf(process.platform === "darwin" || process.platform === "linux")("r
     const stage = temporaryRoot();
     expect(() => stageRuntime(stage, "fixture license", () => { throw new Error("non-system runtime"); })).toThrow("non-system runtime");
     expect(existsSync(path.join(stage, "bin/node"))).toBe(false);
+  });
+
+  it("refuses to bundle a Node runtime older than the security-fixed minimum", async () => {
+    const { assertRuntimeVersion, MINIMUM_RUNTIME_VERSION } = await import(builderPath);
+    expect(MINIMUM_RUNTIME_VERSION).toBe("22.23.4");
+    for (const version of ["22.23.4", "22.24.0", "24.0.0", "26.7.0"]) expect(() => assertRuntimeVersion(version)).not.toThrow();
+    for (const version of ["22.23.3", "22.23.2", "22.9.0", "20.19.0", "garbage"]) {
+      expect(() => assertRuntimeVersion(version)).toThrow(/22\.23\.4/u);
+    }
+    const entry = (() => { const source = readFileSync(new URL(builderPath), "utf8"); return source.slice(source.indexOf("process.argv[1] &&")); })();
+    expect(entry.indexOf("assertRuntimeVersion()")).toBeGreaterThan(-1);
+    expect(entry.indexOf("assertRuntimeVersion()")).toBeLessThan(entry.indexOf("buildRelease("));
+    expect(entry.indexOf("parseBuildArguments(")).toBeLessThan(entry.indexOf("assertRuntimeVersion()"));
   });
 
   it("accepts only an absolute output override and rejects cross-build CLI arguments before building", async () => {
@@ -135,6 +148,8 @@ describe.runIf(process.platform === "darwin" || process.platform === "linux")("r
       writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, version: "1.0.0", type: "module", main: "index.js" }));
       writeFileSync(path.join(dir, "index.js"), `import {appendFileSync} from 'node:fs'; appendFileSync('${stage}/imports.txt', '${name}\\n');\n`);
     }
+    mkdirSync(path.join(stage, "dist/fs"), {recursive:true});
+    writeFileSync(path.join(stage,"dist/fs/native-lock.js"), "import 'fs-native-extensions';\n");
     smokeRelease(stage, root, { metadata: { version: "1.2.3" } });
     const calls = readFileSync(path.join(stage, "calls.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
     expect(calls.map((call) => call.args)).toEqual([["--version"], ["models", "list", "--offline"]]);
@@ -305,7 +320,7 @@ describe.runIf(process.platform === "darwin" || process.platform === "linux")("r
     writeFileSync(path.join(root, "dist/.env"), "SECRET=must-not-read");
     writeFileSync(path.join(root, ".env"), "SECRET=must-not-read");
     const identity = prepareRelease(root, stage);
-    expect(identity.filename).toMatch(/^krutrimconnect-1\.2\.3-(darwin|linux)-(arm64|x64)\.tar\.gz$/u);
+    expect(identity.filename).toMatch(/^krutrimconnect-1\.2\.3-(darwin|linux)-(arm64|x64)(-musl)?\.tar\.gz$/u);
     expect(JSON.parse(readFileSync(path.join(stage, "package.json"), "utf8")).scripts).toBeUndefined();
     expect(JSON.parse(readFileSync(path.join(stage, "package-lock.json"), "utf8")).packages[""].hasInstallScript).toBeUndefined();
     expect(readFileSync(path.join(stage, "dist/cli.js"), "utf8")).toContain("1.2.3");

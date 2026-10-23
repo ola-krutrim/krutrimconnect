@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const workflows = new URL("../../.github/workflows/", import.meta.url);
-const readWorkflow = (name: string) => readFileSync(new URL(name, workflows), "utf8");
+const readWorkflow = (name: string) => readFileSync(new URL(name, workflows), "utf8").replaceAll("\r\n", "\n");
 
 describe("public branch workflow policy", () => {
   it("runs CI on hosted runners only for the public repository with read-only, non-persisted credentials", () => {
@@ -28,6 +28,28 @@ describe("public branch workflow policy", () => {
     for (const command of ["npm ci", "npm run check", "npm run check:installer", "npm test", "npm run build", "npm run verify:package"]) {
       expect(source).toContain(`- run: ${command}`);
     }
+  });
+
+  it("pins every release-building Node runtime to the security-fixed version", () => {
+    for (const name of ["release.yml", "platform-support.yml"]) {
+      const source = readWorkflow(name);
+      const versions = [...source.matchAll(/node-version: ['"]?([^'"\n]+)['"]?/gu)].map((match) => match[1]);
+      expect(versions.length).toBeGreaterThan(0);
+      expect(new Set(versions)).toEqual(new Set(["22.23.4"]));
+    }
+  });
+
+  it("limits the runtime refresh to a confirmed main-branch replacement of the three archives", () => {
+    const source = readWorkflow("runtime-refresh.yml");
+    expect(source).toContain("github.repository == 'ola-krutrim/krutrimconnect' && github.ref == 'refs/heads/main'");
+    expect(source).toContain('test "$CONFIRMATION" = "refresh runtime v$version"');
+    expect(source).toMatch(/^permissions:\n  contents: read\n/mu);
+    expect(source.match(/:\s*write\b/gu)).toHaveLength(1);
+    expect(source).not.toMatch(/self-hosted|pull_request|secrets\./u);
+    expect(source.match(/--clobber/gu)).toHaveLength(1);
+    expect(source).toContain("for target in darwin-arm64 darwin-x64 linux-x64; do");
+    expect(source).toContain("m.nodeVersion!=='22.23.4'");
+    expect([...source.matchAll(/node-version: ['"]?([^'"\n]+)['"]?/gu)].map((match) => match[1])).toEqual(["22.23.4"]);
   });
 
   it("restricts hosted catalogue writes to trusted scheduled or manual main runs", () => {

@@ -68,7 +68,7 @@ export async function recoverReusedBridgeActivation(paths: RuntimePaths, owner: 
   const saved = await readConfigFile(journal);
   if (!saved.existed) return;
   const invalid = (): never => { throw new ConfigurationError(`Invalid bridge activation recovery data: ${journal}`); };
-  if (saved.mode === undefined || (saved.mode & 0o077) !== 0) invalid();
+  if (saved.mode === undefined || (process.platform !== "win32" && (saved.mode & 0o077) !== 0)) invalid();
   let value: { version?: unknown; entries?: unknown };
   try { value = JSON.parse(Buffer.from(saved.content).toString("utf8")) as typeof value; }
   catch { return invalid(); }

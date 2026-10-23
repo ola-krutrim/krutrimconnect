@@ -210,7 +210,7 @@ export async function startBridgeRuntime(
       paths.appHome,
     ],
     {
-      detached: process.platform !== "win32",
+      detached: true,
       env: { ...process.env, KRUTRIM_CONNECT_BRIDGE_LEASE: instanceId },
       shell: false,
       stdio: ["ignore", "ignore", "ignore", "ipc"],

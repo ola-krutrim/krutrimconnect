@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { toolInvocation } from "./tool-invocation.js";
 
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -163,7 +164,8 @@ async function runOpenCode(args: string[]): Promise<void> {
   }
   const token = await bridgeCredential(secrets, runtime.instanceId);
   const code = await new Promise<number | null>((resolve, reject) => {
-    const child = spawn(executable, args, {
+    const invocation = toolInvocation(executable, args);
+    const child = spawn(invocation.command, invocation.args, {
       env: { ...process.env, [OPENCODE_BRIDGE_TOKEN_ENV]: token },
       shell: false,
       stdio: "inherit",

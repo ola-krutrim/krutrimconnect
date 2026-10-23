@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { ConfigurationError } from "./errors.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { detectWindowsRelease, upgradeWindowsRelease, removeWindowsRelease } from "./windows-release.js";
 
 export const RELEASE_REPOSITORY = "ola-krutrim/krutrimconnect";
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-next\.(0|[1-9]\d*))?$/u;
@@ -114,6 +115,7 @@ async function releaseTree(packageDir: string): Promise<string> {
 }
 
 export async function removeReleaseInstall(context: ReleaseInstallContext): Promise<void> {
+  if (process.platform === "win32") return removeWindowsRelease(context);
   const validated = await detectReleaseInstall(pathToFileURL(join(context.packageDir, "package.json")));
   if (validated === undefined || Object.keys(validated).some((key) => validated[key as keyof ReleaseInstallContext] !== context[key as keyof ReleaseInstallContext])) unsafe();
   const lock = join(validated.installDir, ".install-lock");
@@ -135,6 +137,7 @@ export async function removeReleaseInstall(context: ReleaseInstallContext): Prom
 }
 
 export async function installRelease(context: ReleaseInstallContext, version: string): Promise<void> {
+  if (process.platform === "win32") return upgradeWindowsRelease(context, version);
   stableTag(version);
   const validated = await detectReleaseInstall(pathToFileURL(join(context.packageDir, "package.json")));
   if (validated === undefined || Object.keys(validated).some((key) => validated[key as keyof ReleaseInstallContext] !== context[key as keyof ReleaseInstallContext])) unsafe();
@@ -157,6 +160,7 @@ export async function installRelease(context: ReleaseInstallContext, version: st
 }
 
 export async function detectReleaseInstall(packageUrl: URL): Promise<ReleaseInstallContext | undefined> {
+  if (process.platform === "win32") return detectWindowsRelease(packageUrl);
   const packageDir = dirname(fileURLToPath(packageUrl));
   const installDir = dirname(dirname(packageDir));
   try {

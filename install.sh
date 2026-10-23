@@ -405,7 +405,12 @@ case "$(uname -m)" in
 esac
 case "$INSTALL_DIR" in /*) ;; *) fail "Install directory must be absolute." ;; esac
 case "$BIN_DIR" in /*) ;; *) fail "Binary directory must be absolute." ;; esac
-archive="krutrimconnect-${REQUESTED_VERSION}-${platform}-${arch}.tar.gz"
+libc_suffix=""
+if [ "$platform" = linux ] && { [ -f /etc/alpine-release ] || ldd --version 2>&1 | grep -qi musl; }; then
+  [ "$arch" = x64 ] || fail "Alpine releases currently support x64 only."
+  libc_suffix="-musl"
+fi
+archive="krutrimconnect-${REQUESTED_VERSION}-${platform}-${arch}${libc_suffix}.tar.gz"
 work="$(mktemp -d "${TMPDIR:-/tmp}/krutrimconnect-install.XXXXXXXX")"
 trap 'rm -rf "$work"' EXIT
 trap 'exit 1' HUP INT TERM

@@ -5,11 +5,11 @@ Krutrim Cloud model API key and a separately installed coding tool.
 
 ## Installation and PATH
 
-Follow the [README installation command](../README.md#install). The release
+Follow the [README installation instructions](../README.md#install) for your platform. The release
 installer verifies its download and installs the CLI and its own Node runtime.
 It does not require npm, sudo or a GitHub account for published public releases.
 
-The launcher is placed in `~/.local/bin`. If your shell cannot find it, run:
+On macOS and Linux, the launcher is placed in `~/.local/bin`. If your shell cannot find it, run:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -19,9 +19,21 @@ krutrimconnect --version
 The installer prints the exact PATH advice. Set `KRUTRIM_CONNECT_MODIFY_PATH=1`
 when running it to opt into a persistent bash/zsh PATH entry.
 
-Supported release platforms are macOS arm64, macOS x64 and Linux x64/glibc.
-Native Windows and Alpine/musl are unsupported. Linux keychain storage requires
-a functioning Secret Service backend.
+Supported release platforms are macOS arm64/x64, Linux x64/glibc, Alpine Linux
+x64/musl and Windows x64. On Alpine, install `ca-certificates`, `curl` and
+`libstdc++` with `apk` before running the shell installer; no system Node or npm
+is needed. Linux keychain storage requires `secret-tool` and a functioning Secret
+Service backend. A desktop keyring must be running and unlocked; installing the
+client utility alone does not provide a credential store.
+
+On Windows, use the PowerShell installer from the README. The launcher is
+`%LOCALAPPDATA%\KrutrimConnect\bin\krutrimconnect.cmd`. Add that directory to your
+user PATH and open a new terminal. `KRUTRIM_CONNECT_MODIFY_PATH=1` opts into a
+persistent user PATH update. The installation uses private Windows ACLs and
+Windows Credential Manager. Custom absolute local installation and launcher
+roots can be selected with `KRUTRIM_CONNECT_INSTALL_DIR` and
+`KRUTRIM_CONNECT_BIN_DIR`. The roots must be separate directories.
+Windows ARM64/x86 and Alpine ARM64 release archives are not provided.
 
 ## Credentials
 
@@ -33,7 +45,10 @@ krutrimconnect auth status
 Interactive key entry is masked. Login validates the key without inference before
 replacing an existing credential. The OS keychain is the default storage backend.
 An explicitly selected POSIX file fallback stores plaintext with restricted file
-permissions; see [security guidance](../SECURITY.md).
+permissions; see [security guidance](../SECURITY.md). On headless Linux where
+Secret Service is unavailable, explicitly opt into this fallback with
+`krutrimconnect login --allow-file-fallback`. Windows requires Credential Manager
+and does not allow the plaintext fallback.
 
 For automated input, explicitly choose one method:
 
@@ -118,6 +133,6 @@ Uninstall restores managed tool configuration, stops managed bridges, removes
 accessible local credentials and deletes the owned installation. It does not
 revoke the Cloud key. Use `--keep-package` to deactivate while keeping the CLI.
 
-For older internal or npm installations, disconnect tools and uninstall the old
-installation before installing the public release. Public 0.1.x releases cannot
-automatically replace an internal 0.1.12 install or an unrelated launcher.
+On Windows, close older CLI sessions before uninstalling. The launcher is removed
+immediately; a separate cleanup process removes the executable after the uninstall
+command exits. Unrelated files in the launcher directory are preserved.

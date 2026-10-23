@@ -42,7 +42,7 @@
   "packageManager": "npm@11.17.0",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "postbuild": "node scripts/ensure-bin-mode.mjs",
+    "postbuild": "node scripts/ensure-bin-mode.mjs && node scripts/build-musl-lock.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "check:installer": "sh -n install.sh",
     "verify:package": "node scripts/verify-package.mjs",
@@ -57,7 +57,8 @@
     "test:integration": "vitest run test/integration",
     "test:integration:capabilities": "vitest run test/integration/krutrim-conformance.test.ts",
     "test:integration:bridge": "vitest run test/integration/krutrim-chat-bridge.test.ts",
-    "test:all": "vitest run"
+    "test:all": "vitest run",
+    "pretest": "node scripts/build-musl-lock.mjs"
   },
   "keywords": [
     "krutrim",

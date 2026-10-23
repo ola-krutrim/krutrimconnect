@@ -1,0 +1,148 @@
+name: refresh-release-runtime
+
+# Rebuilds the macOS and Linux glibc archives of the EXISTING stable release with the
+# pinned Node runtime and replaces only those archives and their checksums. The tag,
+# version, installers and Windows/musl assets are never changed.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type exactly: refresh runtime vVERSION"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-release-runtime
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.repository == 'ola-krutrim/krutrimconnect' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.guard.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate request
+        id: guard
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
+          test "$CONFIRMATION" = "refresh runtime v$version"
+          gh release view "v$version" --json isDraft,isPrerelease > /tmp/release.json
+          node -e "const r=require('/tmp/release.json'); if(r.isDraft||r.isPrerelease) process.exit(1)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.4"
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - name: Verify native build host
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { assertPortableRuntime } from './scripts/build-release.mjs';
+          if (process.platform !== process.env.EXPECTED_PLATFORM || process.arch !== process.env.EXPECTED_ARCH) {
+            throw new Error('Runner/runtime architecture does not match the artifact matrix.');
+          }
+          assertPortableRuntime();
+          NODE
+      - run: npm ci
+      - run: npm run check
+      - run: npm run check:installer
+      - run: npm test
+      - run: npm run build
+      - run: node scripts/build-release.mjs
+      - run: node scripts/verify-release.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refresh-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/krutrimconnect-${{ needs.validate.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+            release/krutrimconnect-${{ needs.validate.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: refresh-*
+          merge-multiple: true
+          path: release
+      - name: Verify runtime version and replace only the three archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "v$VERSION" --json assets --jq '.assets[].name' | sort > /tmp/existing.txt
+          assets=()
+          for target in darwin-arm64 darwin-x64 linux-x64; do
+            asset="krutrimconnect-$VERSION-$target.tar.gz"
+            grep -Fxq "$asset" /tmp/existing.txt
+            grep -Fxq "$asset.sha256" /tmp/existing.txt
+            (cd release && sha256sum --check "$asset.sha256")
+            tar -xzOf "release/$asset" ./release.json > "/tmp/$target.json"
+            node -e "const m=require('/tmp/$target.json'); if(m.nodeVersion!=='22.23.4') { console.error('Unexpected runtime '+m.nodeVersion); process.exit(1) }"
+            assets+=("release/$asset" "release/$asset.sha256")
+          done
+          gh release upload "v$VERSION" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+
+  public-verify:
+    needs: [validate, publish]
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Anonymous download and checksum of replaced archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION"
+          for target in darwin-arm64 darwin-x64 linux-x64; do
+            asset="krutrimconnect-$VERSION-$target.tar.gz"
+            curl --proto '=https' --proto-redir '=https' -fsSL "$base/$asset" -o "$asset"
+            curl --proto '=https' --proto-redir '=https' -fsSL "$base/$asset.sha256" -o "$asset.sha256"
+            sha256sum --check "$asset.sha256"
+          done

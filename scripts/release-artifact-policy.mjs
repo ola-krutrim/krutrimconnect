@@ -29,16 +29,19 @@ export function releaseIdentity(version, host = {
   nodeVersion: process.versions.node,
   glibcVersion: process.platform === "linux"
     ? process.report.getReport().header.glibcVersionRuntime : undefined,
+  libc: process.platform === "linux" && !process.report.getReport().header.glibcVersionRuntime ? "musl" : undefined,
 }) {
   assertCanonicalVersion(version);
-  if (!["darwin", "linux"].includes(host.platform) || !["arm64", "x64"].includes(host.arch)) {
-    throw new Error("Unsupported release host; use native darwin/linux arm64/x64.");
+  if (!["darwin", "linux", "win32"].includes(host.platform) || !["arm64", "x64"].includes(host.arch)) {
+    throw new Error("Unsupported release host; use native macOS/Linux or Windows x64.");
   }
-  if (host.platform === "linux" && !host.glibcVersion) {
-    throw new Error("Linux release hosts must use glibc, not musl.");
+  if (host.platform === "win32" && host.arch !== "x64") throw new Error("Unsupported Windows release host; x64 is required.");
+  const musl = host.platform === "linux" && !host.glibcVersion;
+  if (musl && host.libc !== "musl") {
+    throw new Error("Linux release hosts must identify glibc or musl.");
   }
   return {
-    filename: `krutrimconnect-${version}-${host.platform}-${host.arch}.tar.gz`,
+    filename: `krutrimconnect-${version}-${host.platform}-${host.arch}${musl ? "-musl" : ""}.${host.platform === "win32" ? "zip" : "tar.gz"}`,
     metadata: {
       schemaVersion: 1,
       distribution: "github-release",
@@ -47,6 +50,7 @@ export function releaseIdentity(version, host = {
       platform: host.platform,
       arch: host.arch,
       nodeVersion: host.nodeVersion,
+      ...(musl ? { libc: "musl" } : {}),
     },
   };
 }

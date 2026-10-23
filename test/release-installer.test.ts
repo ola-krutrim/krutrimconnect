@@ -37,7 +37,8 @@ async function fixture(version = "0.1.0") {
   await writeFile(path.join(stage, "package.json"), JSON.stringify({ name: "krutrimconnect", version }));
   await writeFile(path.join(stage, "release.json"), JSON.stringify({ schemaVersion: 1, distribution: "github-release", repository: "ola-krutrim/krutrimconnect", version, platform: process.platform, arch: process.arch, nodeVersion: process.versions.node }));
   await writeFile(path.join(stage, "install.sh"), await readFile(installer));
-  const name = `krutrimconnect-${version}-${process.platform}-${process.arch}.tar.gz`;
+  const musl = process.platform === "linux" && !(process.report.getReport() as { header: { glibcVersionRuntime?: string } }).header.glibcVersionRuntime;
+  const name = `krutrimconnect-${version}-${process.platform}-${process.arch}${musl ? "-musl" : ""}.tar.gz`;
   const archive = path.join(assets, name);
   async function pack() {
     const tar = spawnSync("tar", ["-czf", archive, "-C", stage, "."], { encoding: "utf8" });

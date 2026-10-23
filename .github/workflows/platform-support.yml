@@ -1,0 +1,171 @@
+name: additional-platforms
+on:
+  workflow_call:
+    inputs:
+      verify_published_only:
+        type: boolean
+        default: false
+      publish:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      verify_published_only:
+        description: Verify the published files without rebuilding or uploading
+        type: boolean
+        default: false
+      publish:
+        description: Add verified Windows and musl assets to the existing release (never overwrite)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: additional-platforms
+  cancel-in-progress: false
+jobs:
+  windows:
+    if: ${{ !inputs.verify_published_only }}
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.4'
+          architecture: x64
+      - run: npm ci
+      - run: npm run check
+      - name: Windows unit and connection tests
+        run: npm test -- --exclude test/release-install.test.ts --exclude test/release-installer.test.ts
+      - run: npm run build
+      - name: Validate PowerShell installer syntax
+        shell: powershell
+        run: |
+          $tokens=$null; $errors=$null
+          [Management.Automation.Language.Parser]::ParseFile((Join-Path $pwd 'install.ps1'),[ref]$tokens,[ref]$errors) | Out-Null
+          if($errors) { $errors | Format-List; exit 1 }
+      - run: node scripts/build-release.mjs
+      - run: node scripts/verify-windows-release.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: additional-windows
+          path: |
+            release/*-win32-x64.zip
+            release/*-win32-x64.zip.sha256
+          if-no-files-found: error
+  alpine:
+    if: ${{ !inputs.verify_published_only }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Native Alpine build, tests and lifecycle
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          docker run --rm -e GITHUB_SHA="$SOURCE_SHA" -v "$PWD:/src" -w /src \
+            node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 sh -ec '
+              apk add --no-cache git curl tar bash build-base util-linux-misc
+              git config --global --add safe.directory /src
+              npm ci
+              npm run check
+              npm run check:installer
+              npm test
+              npm run build
+              node scripts/build-release.mjs
+              node scripts/verify-release.mjs
+            '
+      - name: Clean Alpine install without system Node or npm
+        run: |
+          version=$(jq -r .version package.json)
+          docker run --rm -e KRUTRIM_CONNECT_VERSION="$version" -v "$PWD:/src:ro" alpine:3.22 sh -ec '
+            apk add --no-cache ca-certificates curl libstdc++
+            export HOME=/tmp/test-home KRUTRIM_CONNECT_ASSET_DIR=/src/release
+            mkdir -p "$HOME"
+            sh /src/install.sh
+            "$HOME/.local/bin/krutrimconnect" --version
+            "$HOME/.local/bin/krutrimconnect" models list --offline
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: additional-alpine
+          path: |
+            release/*-linux-x64-musl.tar.gz
+            release/*-linux-x64-musl.tar.gz.sha256
+          if-no-files-found: error
+  publish:
+    if: inputs.publish && !inputs.verify_published_only
+    needs: [windows, alpine]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: additional-*
+          merge-multiple: true
+          path: release
+      - name: Add assets without changing the release tag or existing files
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          gh release view "v$version" --json isDraft,isPrerelease,assets > /tmp/existing-release.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const release=JSON.parse(fs.readFileSync('/tmp/existing-release.json'));
+          if(release.isDraft || release.isPrerelease) throw Error('Expected existing stable release.');
+          const names=['install.ps1',...fs.readdirSync('release')];
+          if(release.assets.some(asset=>names.includes(asset.name))) throw Error('Refusing to overwrite an existing asset.');
+          NODE
+          cp install.ps1 release/install.ps1
+          (cd release && sha256sum --check ./*.sha256)
+          gh release upload "v$version" release/* --repo "$GITHUB_REPOSITORY"
+
+  public-windows:
+    if: ${{ always() && !cancelled() && (inputs.verify_published_only || (inputs.publish && needs.publish.result == 'success')) }}
+    needs: publish
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.4'
+      - name: Anonymous hosted install and upgrade check, then isolated lifecycle
+        run: node scripts/verify-windows-release.mjs --public
+  public-alpine:
+    if: ${{ always() && !cancelled() && (inputs.verify_published_only || (inputs.publish && needs.publish.result == 'success')) }}
+    needs: publish
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Anonymous hosted install without system Node or npm
+        run: |
+          docker run --rm alpine:3.22 sh -ec '
+            apk add --no-cache ca-certificates curl libstdc++
+            ! command -v node
+            ! command -v npm
+            export HOME=/tmp/krutrimconnect-public-home
+            mkdir -p "$HOME"
+            connect_installer="$(mktemp)"
+            trap '\''rm -f "$connect_installer"'\'' EXIT
+            curl --proto '\''=https'\'' --proto-redir '\''=https'\'' -fsSL \
+              https://raw.githubusercontent.com/ola-krutrim/krutrimconnect/main/install.sh \
+              -o "$connect_installer"
+            sh "$connect_installer"
+            "$HOME/.local/bin/krutrimconnect" --version
+            "$HOME/.local/bin/krutrimconnect" models list --offline
+            "$HOME/.local/bin/krutrimconnect" upgrade --check
+          '

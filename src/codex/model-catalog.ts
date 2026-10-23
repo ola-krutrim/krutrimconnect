@@ -1,3 +1,4 @@
+import { toolInvocation } from "../tool-invocation.js";
 import { spawn } from "node:child_process";
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -146,7 +147,10 @@ async function runCodexDebug(command: string): Promise<ProcessResult> {
     let failure: ProcessResult["failure"];
     let settled = false;
     let forceKill: NodeJS.Timeout | undefined;
-    const child = spawn(command, ["debug", "models", "--bundled"], {
+    let invocation;
+    try { invocation = toolInvocation(command, ["debug", "models", "--bundled"]); }
+    catch { resolve({exitCode:null,stdout:"",failure:"spawn"}); return; }
+    const child = spawn(invocation.command, invocation.args, {
       shell: false,
       stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true,

@@ -37,12 +37,14 @@ describe("GitHub release artifact policy", () => {
       expect(() => releaseIdentity(version)).toThrow(/version/iu);
     }
     for (const host of [
-      { platform: "win32", arch: "x64" },
+      { platform: "win32", arch: "arm64" },
       { platform: "darwin", arch: "ia32" },
       { platform: "linux", arch: "x64" },
     ]) {
       expect(() => releaseIdentity("1.2.3", host)).toThrow(/host|glibc/iu);
     }
+    expect(releaseIdentity("1.2.3", { platform: "win32", arch: "x64", nodeVersion: "22.18.0" }).filename).toBe("krutrimconnect-1.2.3-win32-x64.zip");
+    expect(releaseIdentity("1.2.3", { platform: "linux", arch: "x64", libc: "musl", nodeVersion: "22.18.0" })).toMatchObject({filename: "krutrimconnect-1.2.3-linux-x64-musl.tar.gz", metadata: {libc: "musl"}});
     expect(releaseIdentity("1.2.3", {
       platform: "linux", arch: "x64", glibcVersion: "2.35", nodeVersion: "22.18.0",
     }).filename).toBe("krutrimconnect-1.2.3-linux-x64.tar.gz");

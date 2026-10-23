@@ -8,7 +8,7 @@ import path from "node:path";
 import { releaseIdentity } from "./release-artifact-policy.mjs";
 
 const ASSET_DIRECTORIES = ["schemas", "catalog", "licenses"];
-const ASSET_FILES = ["LICENSE", "NOTICE", "README.md", "SECURITY.md", "install.sh", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md"];
+const ASSET_FILES = ["LICENSE", "NOTICE", "README.md", "SECURITY.md", "install.sh", "install.ps1", "docs/legal/PRIVACY_POLICY.md", "docs/legal/TERMS_AND_CONDITIONS.md", "docs/legal/LICENSE_SCOPE.md", "docs/user-guide.md", "docs/legal/USER_NOTICES.md"];
 
 // Resolve both launcher symlinks and the installer's `current` directory symlink.
 const LAUNCHER = `#!/bin/sh
@@ -53,7 +53,11 @@ export function loadNodeLicense(download = execFileSync) {
 }
 
 export function assertPortableRuntime({ platform = process.platform, inspect = execFileSync } = {}) {
-  const failure = "Node has non-system dependencies; use an official standalone Node runtime.";
+  const failure = "Node has non-system dependencies; use a standalone Node runtime.";
+  if (platform === "win32") {
+    if (process.platform !== "win32" || readFileSync(process.execPath).subarray(0, 2).toString() !== "MZ") throw new Error(failure);
+    return;
+  }
   const command = platform === "darwin" ? "otool" : "ldd";
   const args = platform === "darwin" ? ["-L", process.execPath] : [process.execPath];
   let output;
@@ -70,7 +74,7 @@ export function assertPortableRuntime({ platform = process.platform, inspect = e
       throw new Error(failure);
     }
   } else if (platform === "linux") {
-    const baseline = /^(?:lib(?:c|m|dl|rt|pthread)\.so\.\d+|libstdc\+\+\.so\.6|libgcc_s\.so\.1|libatomic\.so\.1|ld-linux-(?:x86-64|aarch64)\.so\.[12])$/u;
+    const baseline = /^(?:lib(?:c|m|dl|rt|pthread)\.so\.\d+|libstdc\+\+\.so\.6|libgcc_s\.so\.1|libatomic\.so\.1|libc\.musl-x86_64\.so\.1|ld-musl-x86_64\.so\.1|ld-linux-(?:x86-64|aarch64)\.so\.[12])$/u;
     if (!lines.length) throw new Error(failure);
     for (const line of lines) {
       if (/^linux-vdso\.so\.1\s/u.test(line)) continue;
@@ -86,12 +90,24 @@ export function assertPortableRuntime({ platform = process.platform, inspect = e
   }
 }
 
+export const MINIMUM_RUNTIME_VERSION = "22.23.4";
+
+export function assertRuntimeVersion(version = process.versions.node) {
+  const parse = (value) => /^(\d+)\.(\d+)\.(\d+)$/u.exec(value)?.slice(1).map(Number);
+  const actual = parse(version);
+  const minimum = parse(MINIMUM_RUNTIME_VERSION);
+  const index = actual ? actual.findIndex((part, position) => part !== minimum[position]) : -1;
+  const older = !actual || (index !== -1 && actual[index] < minimum[index]);
+  if (older) throw new Error(`Bundled Node runtime ${version} is older than the security-fixed ${MINIMUM_RUNTIME_VERSION}.`);
+}
+
 export function stageRuntime(stage, license, validateRuntime = assertPortableRuntime) {
   validateRuntime();
   mkdirSync(path.join(stage, "bin"), { recursive: true });
-  copyFileSync(process.execPath, path.join(stage, "bin/node"));
-  chmodSync(path.join(stage, "bin/node"), 0o755);
-  writeFileSync(path.join(stage, "bin/krutrimconnect"), LAUNCHER, { mode: 0o755 });
+  const windows = process.platform === "win32";
+  copyFileSync(process.execPath, path.join(stage, windows ? "bin/node.exe" : "bin/node"));
+  chmodSync(path.join(stage, windows ? "bin/node.exe" : "bin/node"), 0o755);
+  writeFileSync(path.join(stage, windows ? "bin/krutrimconnect.cmd" : "bin/krutrimconnect"), windows ? '@echo off\r\n"%~dp0node.exe" "%~dp0..\\dist\\cli.js" %*\r\n' : LAUNCHER, { mode: 0o755 });
   mkdirSync(path.join(stage, "licenses"), { recursive: true });
   writeFileSync(path.join(stage, "licenses/Node-LICENSE"), license);
   writeFileSync(path.join(stage, "THIRD_PARTY_NOTICES"),
@@ -123,7 +139,7 @@ function copyDirectory(source, destination) {
     else {
       assertRegular(from);
       // dist is generated/untracked; only compiled JS, declarations and maps belong here.
-      if (/\.(?:js|d\.ts)(?:\.map)?$/u.test(entry.name)) copyFile(from, to);
+      if (/\.(?:js|d\.ts)(?:\.map)?$/u.test(entry.name) || entry.name === "musl-lock.node") copyFile(from, to);
     }
   }
 }
@@ -132,7 +148,8 @@ function isolatedEnvironment(workspace) {
   const home = path.join(workspace, "home");
   mkdirSync(home, { recursive: true });
   return {
-    PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+    PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? "/usr/bin:/bin"}`,
+    ...(process.platform === "win32" ? { SystemRoot: process.env.SystemRoot, TEMP: workspace, TMP: workspace, USERPROFILE: home, APPDATA: path.join(home, "AppData", "Roaming"), LOCALAPPDATA: path.join(home, "AppData", "Local") } : {}),
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, "config"),
     XDG_CACHE_HOME: path.join(home, "cache"),
@@ -147,11 +164,12 @@ function isolatedEnvironment(workspace) {
 export function installProduction(stage, workspace) {
   const candidates = [
     path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npm-cli.js"),
+    path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js"),
     path.join(path.dirname(process.execPath), "npm"),
     ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, "npm")),
   ];
   const npmCli = candidates.filter(existsSync).map((file) => realpathSync(file))
-    .find((file) => file.endsWith("/npm-cli.js"));
+    .find((file) => file.endsWith(`${path.sep}npm-cli.js`));
   if (!npmCli) throw new Error("Cannot locate npm-cli.js; install npm on the build host.");
   const userConfig = path.join(workspace, "npm-userconfig");
   const globalConfig = path.join(workspace, "npm-globalconfig");
@@ -166,7 +184,7 @@ export function installProduction(stage, workspace) {
 }
 
 export function smokeRelease(stage, workspace, identity) {
-  const env = { ...isolatedEnvironment(workspace), PATH: "/usr/bin:/bin" };
+  const env = { ...isolatedEnvironment(workspace), ...(process.platform === "win32" ? {} : { PATH: "/usr/bin:/bin" }) };
   const run = (command, args) => {
     try {
       return execFileSync(command, args, { cwd: stage, env, encoding: "utf8",
@@ -175,16 +193,19 @@ export function smokeRelease(stage, workspace, identity) {
       throw new Error(`Release smoke failed. Use an official standalone Node distribution.\n${error.message}`);
     }
   };
-  const cli = path.join(stage, "bin/krutrimconnect");
-  if (run(cli, ["--version"]).trim() !== identity.metadata.version) {
+  const windows = process.platform === "win32";
+  const node = path.join(stage, windows ? "bin/node.exe" : "bin/node");
+  const cli = windows ? node : path.join(stage, "bin/krutrimconnect");
+  const cliArgs = windows ? [path.join(stage, "dist/cli.js")] : [];
+  if (run(cli, [...cliArgs, "--version"]).trim() !== identity.metadata.version) {
     throw new Error("Bundled CLI version does not match release metadata.");
   }
-  const models = run(cli, ["models", "list", "--offline"]);
+  const models = run(cli, [...cliArgs, "models", "list", "--offline"]);
   if (!models.includes("MODEL") || !models.includes("gpt-oss-20b")) {
     throw new Error("Bundled offline model catalogue smoke failed.");
   }
-  run(path.join(stage, "bin/node"), ["--input-type=module", "-e",
-    'await import("@napi-rs/keyring"); await import("fs-native-extensions");',
+  run(node, ["--input-type=module", "-e",
+    'await import("@napi-rs/keyring"); await import("./dist/fs/native-lock.js");',
   ]);
 }
 
@@ -223,6 +244,10 @@ export function packRelease(stage, output, identity, verify = () => {}) {
     materialize(stage, flat);
     verify(flat, workspace, identity);
     const tarball = path.join(workspace, "artifact.tar.gz");
+    if (identity.metadata?.platform === "win32") {
+      const script = "Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory($env:KC_ZIP_SOURCE, $env:KC_ZIP_TARGET)";
+      execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { env: { ...process.env, KC_ZIP_SOURCE: flat, KC_ZIP_TARGET: tarball }, timeout: 120_000 });
+    } else {
     const bsdTar = execFileSync("tar", ["--version"], { encoding: "utf8" }).includes("bsdtar");
     const ownership = bsdTar
       ? ["--uid=0", "--gid=0", "--uname=root", "--gname=root"]
@@ -231,6 +256,7 @@ export function packRelease(stage, output, identity, verify = () => {}) {
       env: { ...isolatedEnvironment(workspace), COPYFILE_DISABLE: "1" },
       encoding: "utf8", timeout: 120_000,
     });
+    }
     const digest = createHash("sha256").update(readFileSync(tarball)).digest("hex");
     mkdirSync(output, { recursive: true });
     copyFileSync(tarball, archive, constants.COPYFILE_EXCL);
@@ -254,6 +280,7 @@ export function buildRelease({ repositoryRoot, output = path.join(repositoryRoot
   try {
     const stage = path.join(workspace, "stage");
     const identity = prepareRelease(repositoryRoot, stage);
+    if (process.env.GITHUB_SHA) identity.metadata.sourceCommit = process.env.GITHUB_SHA;
     if ([identity.filename, `${identity.filename}.sha256`].some((file) => existsSync(path.join(output, file)))) {
       throw new Error("Refusing to overwrite release artifacts.");
     }
@@ -329,6 +356,7 @@ export function parseBuildArguments(args, repositoryRoot) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const options = parseBuildArguments(process.argv.slice(2), fileURLToPath(new URL("..", import.meta.url)));
+    assertRuntimeVersion();
     const result = buildRelease(options);
     process.stdout.write(`Built ${result.archive}\nSHA-256: ${result.checksum}\n`);
   } catch (error) {

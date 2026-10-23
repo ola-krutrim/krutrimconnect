@@ -3,7 +3,7 @@ import { constants as fsConstants } from "node:fs";
 import { access, chmod, lstat, mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 
-import { tryLock, unlock } from "fs-native-extensions";
+import { tryLock, unlock } from "./native-lock.js";
 
 import { AtomicWriteError, ConfigurationError } from "../errors.js";
 import { beforeFileMutation } from "./mutations.js";
@@ -74,7 +74,7 @@ async function syncDirectory(directory: string): Promise<void> {
     handle = await open(directory, "r");
     await handle.sync();
   } catch (error) {
-    if (process.platform !== "win32") {
+    if (process.platform !== "win32" || !["EPERM", "EACCES", "EISDIR", "EINVAL", "ENOTSUP"].includes((error as NodeJS.ErrnoException).code ?? "")) {
       throw error;
     }
   } finally {

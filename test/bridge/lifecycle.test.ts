@@ -121,7 +121,7 @@ it.each(["resolve", "reject"])("late credential %s cannot resume a cancelled act
   try {
     const childPid = await run.child();
     await run.message("activation-reading-key");
-    run.parent.kill("SIGTERM");
+    signalFixture(run.parent, "SIGTERM");
     expect((await run.message("failed")).message).toMatch(/interrupted/);
     expect(run.messages.some((m) => m.type === "credential-settled")).toBe(false);
     expect(running(childPid)).toBe(false);
@@ -156,7 +156,7 @@ it.each((["SIGINT", "SIGTERM"] as const).flatMap((signal) =>
   try {
     const childPid = mode === "reused" ? undefined : await run.child();
     await run.message("activation-reading-key");
-    run.parent.kill(signal);
+    signalFixture(run.parent, signal);
     // No release message: cancellation must settle with the reader blocked.
     expect((await run.message("failed")).message).toMatch(/interrupted/);
     await withKrutrimCapabilityLock(run.test.paths, async () => {});
@@ -564,3 +564,8 @@ it.each(["opencode", "codex"] as const)("%s publishes only on commit and survive
     expect(await bridgeIsHealthy(record)).toBe(true);
   } finally { await run.cleanup(); }
 }, 15000);
+
+function signalFixture(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (process.platform === "win32") child.send({fixtureSignal: signal});
+  else child.kill(signal);
+}
